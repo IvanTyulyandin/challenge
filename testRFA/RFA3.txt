@@ -1,0 +1,13 @@
+digraph gram {
+rankdir = LR
+0; 1; 2;
+1[label="S", color="green"];
+2[label="S", shape="doublecircle"];
+0[label="T", color="green"];
+0[label="T", shape="doublecircle"];
+1 -> 1[label = "a"];
+1 -> 1[label = "T"];
+1 -> 2[label = "b"];
+0 -> 0[label = "a"];
+0 -> 0[label = "T"];
+}
