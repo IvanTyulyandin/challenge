@@ -14,6 +14,12 @@ using adjacencyType = vector<map<string, vector<int>>>;
 using startStatesType = map<int, vector<string>>;
 using finalStatesType = map<string, vector<int>>;
 
+struct edge {
+    int from;
+    int to;
+    string by;
+};
+
 void readRFA(const string & fileName,
              adjacencyType & adjVec,
              startStatesType & startStates,
@@ -22,4 +28,5 @@ void readRFA(const string & fileName,
 
 void readDFA(const string & fileName,
              adjacencyType & adjVec,
-             int & numOfStates);
+             int & numOfStates,
+             vector<edge> & newEdges);

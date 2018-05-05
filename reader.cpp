@@ -44,7 +44,8 @@ namespace {
     void readEdges(ifstream & fileStream,
                    adjacencyType & adjVec,
                    unsigned int numOfStates,
-                   string & curString) // curString contains rule
+                   string & curString, // curString contains rule
+                   vector<edge> & newEdges)
     {
         adjVec = adjacencyType(numOfStates, map<string, vector<int>>());
 
@@ -64,6 +65,7 @@ namespace {
                         auto from = stoi(res.str(1));
                         auto to = stoi(res.str(3));
                         auto by = res.str(5);
+                        newEdges.emplace_back(move(edge{.from = from, .to = to, .by = by}));
                         auto iter = adjVec[from].find(by);
                         if (iter == adjVec[from].end()) {
                             adjVec[from].insert(make_pair(by, vector<int>(1, to)));
@@ -123,7 +125,7 @@ void readRFA(const string & fileName,
                 if (regex_search(curString, res, isStart)) {
                     auto states = vector<string>(1, label);
                     auto emplaceResult = startStates.emplace(numOfStateInDef, states);
-                    if (!(emplaceResult.second)) {
+                    if ( ! emplaceResult.second) {
                         auto iter = emplaceResult.first;
                         (*iter).second.push_back(label);
                     }
@@ -133,7 +135,7 @@ void readRFA(const string & fileName,
                 if (regex_search(curString, res, isFinal)) {
                     auto states = vector<int>(1, numOfStateInDef);
                     auto emplaceResult = finalStates.emplace(label, states);
-                    if (!(emplaceResult.second)) {
+                    if ( ! emplaceResult.second) {
                         auto iter = emplaceResult.first;
                         (*iter).second.push_back(numOfStateInDef);
                     }
@@ -145,15 +147,16 @@ void readRFA(const string & fileName,
         }
         getline(fileStream, curString);
     }
-
-    readEdges(fileStream, adjVec, static_cast<unsigned int>(numOfStates), curString);
+    vector<edge> dummy = vector<edge>(0);
+    readEdges(fileStream, adjVec, static_cast<unsigned int>(numOfStates), curString, dummy);
     fileStream.close();
 }
 
 
 void readDFA(const string & fileName,
              adjacencyType & adjVec,
-             int & numOfStates)
+             int & numOfStates,
+             vector<edge> & newEdges)
 {
     ifstream fileStream = openFile(fileName);
 
@@ -162,5 +165,5 @@ void readDFA(const string & fileName,
     numOfStates = static_cast<int>(split(curString, ';').size());
     getline(fileStream, curString);
 
-    readEdges(fileStream, adjVec, static_cast<unsigned int>(numOfStates), curString);
+    readEdges(fileStream, adjVec, static_cast<unsigned int>(numOfStates), curString, newEdges);
 }
