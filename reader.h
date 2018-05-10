@@ -18,6 +18,11 @@ struct edge {
     int from;
     int to;
     string by;
+
+    edge() = default;
+
+    edge(int fromState, int toState, string & bySymb)
+            : from(fromState), to(toState), by(bySymb) {}
 };
 
 void readRFA(const string & fileName,

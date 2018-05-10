@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <set>
+#include <chrono>
 
 
 using indexArrayType = vector<std::pair<int, int>>;
@@ -59,7 +60,34 @@ void updateMatrix(const vector<edge> & DFAedges,
     }
 }
 
+void insertToFiniteAutomation(adjacencyType & finiteAutomation, int start, int final, string & by) {
+    auto existIter = finiteAutomation[start].find(by);
+    if (existIter != finiteAutomation[start].end()) {
+        for (auto state : existIter->second) {
+            if (state == final) {
+                return; // edge exist already
+            }
+        }
+        existIter->second.push_back(final);
+    } else {
+        finiteAutomation[start].insert(make_pair(by, vector<int>(1, final)));
+    }
+}
+
+int countResult(const adjacencyType & DFA) {
+    int res = 0;
+    for (auto i = 0; i < numOfStatesDFA; ++ i) {
+        for (auto edge : DFA[i]) {
+            if (edge.first == "S") {
+                res += edge.second.size();
+            }
+        }
+    }
+    return res;
+}
+
 int main() {
+
     adjacencyType RFA;
     startStatesType startStatesRFA;
     finalStatesType finalStatesRFA;
@@ -67,7 +95,9 @@ int main() {
 
     adjacencyType DFA;
     vector<edge> newEdges = vector<edge>(0);
-    readDFA("data/atom-primitive.dot", DFA, numOfStatesDFA, newEdges);
+    readDFA("data/wine.dot", DFA, numOfStatesDFA, newEdges);
+
+    auto start_time = std::chrono::steady_clock::now();
 
     char ** matrix;
     matrixSize = numOfStatesDFA * numOfStatesRFA;
@@ -86,13 +116,10 @@ int main() {
         for (auto & by : iter.second) {
             auto finalsIter = finalStatesRFA.find(by);
             // if it is equal to end iterator => incorrect input
-            for (auto & finalGrm : (*finalsIter).second) {
+            for (auto finalGrm : finalsIter->second) {
                 if (startGrm == finalGrm) {
                     for (auto i = 0; i < numOfStatesDFA; ++ i) {
-                        auto insertResult = RFA[i].insert(make_pair(by, vector<int>(1, i)));
-                        if ( ! insertResult.second) {
-                            insertResult.first->second.emplace_back(i);
-                        }
+                        insertToFiniteAutomation(DFA, i, i, by);
                     }
                 }
             }
@@ -102,7 +129,7 @@ int main() {
     bool needOneMoreStep = false;
 
     indexArrayType indexArray = indexArrayType(0);
-    indexArray.reserve(numOfStatesDFA * numOfStatesRFA);
+    indexArray.reserve(static_cast<unsigned int>(numOfStatesDFA * numOfStatesRFA));
 
     for (int i = 0; i < numOfStatesDFA; ++ i) {
         for (int j = 0; j < numOfStatesRFA; ++ j) {
@@ -123,7 +150,9 @@ int main() {
                 if (matrixRow[k]) {
                     char * matrixK = matrix[k];
                     for (auto j = 0; j < matrixSize; ++ j) {
-                        matrixRow[j] = matrixRow[j] || matrixK[j];
+                        if (matrixK[j]) {
+                            matrixRow[j] = true;
+                        }
                     }
                 }
             }
@@ -141,37 +170,19 @@ int main() {
             char * matrixRow = matrix[i];
             int startDFA = indexArray[i].first;
             int startGrm = indexArray[i].second;
-            auto nonTermIter = startStatesRFA.find(startGrm);
-            if (nonTermIter != startStatesRFA.end()) {
+            auto nonTermStartIter = startStatesRFA.find(startGrm);
+            if (nonTermStartIter != startStatesRFA.end()) {
                 for (auto j = 0; j < matrixSize; ++ j) {
                     if (matrixRow[j]) {
                         int finalDFA = indexArray[j].first;
                         int finalGrm = indexArray[j].second;
-                        for (auto nonTerm : nonTermIter->second) {
-                            auto iter = finalStatesRFA.find(nonTerm);
-                            if (iter != finalStatesRFA.end()) {
-                                for (auto to : iter->second) {
-                                    if (to == finalGrm) {
-                                        auto dfaFind = DFA[startDFA].find(nonTerm);
-                                        if (dfaFind != DFA[startDFA].end()) {
-                                            bool edgeExist = false;
-                                            for (auto to : dfaFind->second) {
-                                                if (to == finalDFA) {
-                                                    edgeExist = true;
-                                                    break;
-                                                }
-                                            }
-                                            if ( ! edgeExist) {
-                                                auto insRes = DFA[startDFA].insert(make_pair(nonTerm, vector<int>(1, finalDFA)));
-                                                if ( ! insRes.second) {
-                                                    insRes.first->second.push_back(finalDFA);
-                                                }
-                                                newEdges.emplace_back(move(edge{.from = startDFA,
-                                                        .to = finalDFA, .by = nonTerm}));
-                                                needOneMoreStep = true;
-
-                                            }
-                                        }
+                        for (auto & nonTerm : nonTermStartIter->second) {
+                            auto nonTermFinalIter = finalStatesRFA.find(nonTerm);
+                            if (nonTermFinalIter != finalStatesRFA.end()) {
+                                for (auto finalStateForNonTerm : nonTermFinalIter->second) {
+                                    if (finalStateForNonTerm == finalGrm) {
+                                        newEdges.push_back(move(edge(startDFA, finalDFA, nonTerm)));
+                                        insertToFiniteAutomation(DFA, startDFA, finalDFA, nonTerm);
                                     }
                                 }
                             }
@@ -179,7 +190,13 @@ int main() {
                     }
                 }
             }
+
         }
 
     } while (needOneMoreStep);
+
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    std::cout << "Time: " << duration.count() << " msec\n";
+    cout << "Result: " << countResult(DFA) << endl;
 }

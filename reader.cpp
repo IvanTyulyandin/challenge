@@ -65,7 +65,7 @@ namespace {
                         auto from = stoi(res.str(1));
                         auto to = stoi(res.str(3));
                         auto by = res.str(5);
-                        newEdges.emplace_back(move(edge{.from = from, .to = to, .by = by}));
+                        newEdges.emplace_back(move(edge(from,to,by)));
                         auto iter = adjVec[from].find(by);
                         if (iter == adjVec[from].end()) {
                             adjVec[from].insert(make_pair(by, vector<int>(1, to)));
