@@ -60,18 +60,19 @@ void updateMatrix(const vector<edge> & DFAedges,
     }
 }
 
-void insertToFiniteAutomation(adjacencyType & finiteAutomation, int start, int final, string & by) {
+bool insertToFiniteAutomation(adjacencyType & finiteAutomation, int start, int final, string & by) {
     auto existIter = finiteAutomation[start].find(by);
     if (existIter != finiteAutomation[start].end()) {
         for (auto state : existIter->second) {
             if (state == final) {
-                return; // edge exist already
+                return false; // edge exist already
             }
         }
         existIter->second.push_back(final);
     } else {
         finiteAutomation[start].insert(make_pair(by, vector<int>(1, final)));
     }
+    return true;
 }
 
 int countResult(const adjacencyType & DFA) {
@@ -84,6 +85,13 @@ int countResult(const adjacencyType & DFA) {
         }
     }
     return res;
+}
+
+void getCurTime(decltype(chrono::steady_clock::now()) start_time, string msg) {
+    auto cur = chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(cur - start_time);
+    cout << msg << endl;
+    std::cout << "Time: " << duration.count() << " msec\n";
 }
 
 int main() {
@@ -143,6 +151,9 @@ int main() {
         // stage 1: add info about new edges to matrix
         updateMatrix(newEdges, RFA, matrix);
 
+        getCurTime(start_time, "1 stage done");
+
+
         // stage 2: closure
         for (auto k = 0; k < matrixSize; ++ k) {
             for (auto i = 0; i < matrixSize; ++ i) {
@@ -158,6 +169,8 @@ int main() {
             }
         }
 
+        getCurTime(start_time, "2 stage done");
+
         // stage 3: add new edges for nonterminals to DFA after closure
 
         // can be improved by reordering of search
@@ -168,21 +181,21 @@ int main() {
         newEdges = vector<edge>(0);
         for (auto i = 0; i < matrixSize; ++ i) {
             char * matrixRow = matrix[i];
-            int startDFA = indexArray[i].first;
             int startGrm = indexArray[i].second;
             auto nonTermStartIter = startStatesRFA.find(startGrm);
             if (nonTermStartIter != startStatesRFA.end()) {
                 for (auto j = 0; j < matrixSize; ++ j) {
                     if (matrixRow[j]) {
-                        int finalDFA = indexArray[j].first;
                         int finalGrm = indexArray[j].second;
                         for (auto & nonTerm : nonTermStartIter->second) {
                             auto nonTermFinalIter = finalStatesRFA.find(nonTerm);
                             if (nonTermFinalIter != finalStatesRFA.end()) {
                                 for (auto finalStateForNonTerm : nonTermFinalIter->second) {
                                     if (finalStateForNonTerm == finalGrm) {
+                                        int startDFA = indexArray[i].first;
+                                        int finalDFA = indexArray[j].first;
                                         newEdges.push_back(move(edge(startDFA, finalDFA, nonTerm)));
-                                        insertToFiniteAutomation(DFA, startDFA, finalDFA, nonTerm);
+                                        needOneMoreStep = insertToFiniteAutomation(DFA, startDFA, finalDFA, nonTerm);
                                     }
                                 }
                             }
@@ -192,11 +205,9 @@ int main() {
             }
 
         }
+        getCurTime(start_time, "3 stage done");
 
     } while (needOneMoreStep);
 
-    auto end_time = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    std::cout << "Time: " << duration.count() << " msec\n";
-    cout << "Result: " << countResult(DFA) << endl;
+    getCurTime(start_time, "Done");
 }
