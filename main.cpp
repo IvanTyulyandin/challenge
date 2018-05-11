@@ -7,6 +7,7 @@
 #include <iostream>
 #include <set>
 #include <chrono>
+#include <future>
 
 
 using indexArrayType = vector<std::pair<int, int>>;
@@ -87,7 +88,7 @@ int countResult(const adjacencyType & DFA) {
     return res;
 }
 
-void getCurTime(decltype(chrono::steady_clock::now()) start_time, string msg) {
+void getCurTime(decltype(chrono::steady_clock::now()) start_time, string && msg) {
     auto cur = chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(cur - start_time);
     cout << msg << endl;
@@ -153,9 +154,38 @@ int main() {
 
         getCurTime(start_time, "1 stage done");
 
+        constexpr int THREADS = 4;
+        int step = matrixSize / THREADS; // 4 == num of threads
 
-        // stage 2: closure
-        for (auto k = 0; k < matrixSize; ++ k) {
+        auto parallelClosure = [&matrix, step](int startK) {
+            int endK = startK + step;
+            for (auto k = startK; k < endK; ++ k) {
+                for (auto i = 0; i < matrixSize; ++ i) {
+                    char * matrixRow = matrix[i];
+                    if (matrixRow[k]) {
+                        char * matrixK = matrix[k];
+                        for (auto j = 0; j < matrixSize; ++ j) {
+                            if (matrixK[j]) {
+                                matrixRow[j] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+
+
+        vector<future<void>> futArr;
+        futArr.reserve(THREADS);
+        for (auto i = 0; i < THREADS; ++ i) {
+            futArr.emplace_back(std::async(launch::async, parallelClosure, i * step));
+        }
+
+        for (auto i = 0; i < THREADS; ++ i) {
+            futArr[i].get();
+        }
+        for (auto k = step * THREADS; k < matrixSize; ++ k) {
             for (auto i = 0; i < matrixSize; ++ i) {
                 char * matrixRow = matrix[i];
                 if (matrixRow[k]) {
@@ -168,6 +198,21 @@ int main() {
                 }
             }
         }
+
+        // stage 2: closure
+//        for (auto k = 0; k < matrixSize; ++ k) {
+//            for (auto i = 0; i < matrixSize; ++ i) {
+//                char * matrixRow = matrix[i];
+//                if (matrixRow[k]) {
+//                    char * matrixK = matrix[k];
+//                    for (auto j = 0; j < matrixSize; ++ j) {
+//                        if (matrixK[j]) {
+//                            matrixRow[j] = true;
+//                        }
+//                    }
+//                }
+//            }
+//        }
 
         getCurTime(start_time, "2 stage done");
 
@@ -209,5 +254,6 @@ int main() {
 
     } while (needOneMoreStep);
 
-    getCurTime(start_time, "Done");
+    cout << countResult(DFA);
+
 }
