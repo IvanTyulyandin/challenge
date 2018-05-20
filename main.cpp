@@ -64,14 +64,9 @@ void updateMatrix(const vector<edge> & DFAedges,
 bool insertToFiniteAutomation(adjacencyType & finiteAutomation, int start, int final, string & by) {
     auto existIter = finiteAutomation[start].find(by);
     if (existIter != finiteAutomation[start].end()) {
-        for (auto state : existIter->second) {
-            if (state == final) {
-                return false; // edge exist already
-            }
-        }
-        existIter->second.push_back(final);
+        return existIter->second.insert(final).second;
     } else {
-        finiteAutomation[start].insert(make_pair(by, vector<int>(1, final)));
+        finiteAutomation[start].insert(make_pair(by, set<int>{final}));
     }
     return true;
 }
@@ -104,9 +99,7 @@ int main() {
 
     adjacencyType DFA;
     vector<edge> newEdges = vector<edge>(0);
-    readDFA("data/wine.dot", DFA, numOfStatesDFA, newEdges);
-
-    auto start_time = std::chrono::steady_clock::now();
+    readDFA("data/finding.dot", DFA, numOfStatesDFA, newEdges);
 
     char ** matrix;
     matrixSize = numOfStatesDFA * numOfStatesRFA;
@@ -118,6 +111,8 @@ int main() {
             matrixRow[j] = 0;
         }
     }
+
+	auto start_time = std::chrono::steady_clock::now();
 
     // add edges to automation, if nonterminal start == end
     for (auto & iter : startStatesRFA) {
@@ -146,57 +141,49 @@ int main() {
         }
     }
 
+
+    auto THREADS = std::thread::hardware_concurrency();
+    int step = matrixSize / THREADS;
+
+    auto parallelClosure = [&matrix](int startK, int howMuch) {
+        int endK = startK + howMuch;
+        for (auto k = startK; k < endK; ++ k) {
+            for (auto i = 0; i < matrixSize; ++ i) {
+                char * matrixRow = matrix[i];
+                if (matrixRow[k]) {
+                    char * matrixK = matrix[k];
+                    for (auto j = 0; j < matrixSize; ++ j) {
+                        if (matrixK[j])
+                    		matrixRow[j] = 1;
+                    }
+                }
+            }
+        }
+    };
+
     do {
         needOneMoreStep = false;
 
         // stage 1: add info about new edges to matrix
         updateMatrix(newEdges, RFA, matrix);
 
-        getCurTime(start_time, "1 stage done");
-
-        constexpr int THREADS = 4;
-        int step = matrixSize / THREADS; // 4 == num of threads
-
-        auto parallelClosure = [&matrix, step](int startK) {
-            int endK = startK + step;
-            for (auto k = startK; k < endK; ++ k) {
-                for (auto i = 0; i < matrixSize; ++ i) {
-                    char * matrixRow = matrix[i];
-                    if (matrixRow[k]) {
-                        char * matrixK = matrix[k];
-                        for (auto j = 0; j < matrixSize; ++ j) {
-                            if (matrixK[j]) {
-                                matrixRow[j] = true;
-                            }
-                        }
-                    }
-                }
-            }
-        };
+        //getCurTime(start_time, "1 stage done");
 
 
 
         vector<future<void>> futArr;
         futArr.reserve(THREADS);
-        for (auto i = 0; i < THREADS; ++ i) {
-            futArr.emplace_back(std::async(launch::async, parallelClosure, i * step));
+        for (auto i = 0; i < THREADS - 1; ++ i) {
+            futArr.emplace_back(std::async(launch::async, parallelClosure, i * step, step));
         }
 
-        for (auto i = 0; i < THREADS; ++ i) {
+        // 9 / 2 = 4
+		// на 4 тред - 3
+		//
+        parallelClosure((THREADS - 1) * step, matrixSize - (THREADS - 1) * step);
+
+        for (auto i = 0; i < THREADS - 1; ++ i) {
             futArr[i].get();
-        }
-        for (auto k = step * THREADS; k < matrixSize; ++ k) {
-            for (auto i = 0; i < matrixSize; ++ i) {
-                char * matrixRow = matrix[i];
-                if (matrixRow[k]) {
-                    char * matrixK = matrix[k];
-                    for (auto j = 0; j < matrixSize; ++ j) {
-                        if (matrixK[j]) {
-                            matrixRow[j] = true;
-                        }
-                    }
-                }
-            }
         }
 
         // stage 2: closure
@@ -214,7 +201,7 @@ int main() {
 //            }
 //        }
 
-        getCurTime(start_time, "2 stage done");
+        //getCurTime(start_time, "2 stage done");
 
         // stage 3: add new edges for nonterminals to DFA after closure
 
@@ -250,10 +237,11 @@ int main() {
             }
 
         }
-        getCurTime(start_time, "3 stage done");
+        //getCurTime(start_time, "3 stage done");
 
     } while (needOneMoreStep);
 
-    cout << countResult(DFA);
+    getCurTime(start_time, "");
+    cout << countResult(DFA) << "\n";
 
 }

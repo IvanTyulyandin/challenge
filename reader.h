@@ -7,10 +7,11 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 
 using namespace std;
 
-using adjacencyType = vector<map<string, vector<int>>>;
+using adjacencyType = vector<map<string, set<int>>>;
 using startStatesType = map<int, vector<string>>;
 using finalStatesType = map<string, vector<int>>;
 
@@ -19,7 +20,7 @@ struct edge {
     int to;
     string by;
 
-    edge() = default;
+    edge() : from(0), to(0), by("") {};
 
     edge(int fromState, int toState, string & bySymb)
             : from(fromState), to(toState), by(bySymb) {}

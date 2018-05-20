@@ -47,7 +47,7 @@ namespace {
                    string & curString, // curString contains rule
                    vector<edge> & newEdges)
     {
-        adjVec = adjacencyType(numOfStates, map<string, vector<int>>());
+        adjVec = adjacencyType(numOfStates, map<string, set<int>>());
 
         //regex for X -> Y[label="Z"]
         regex automationRule ("([0-9]+)"
@@ -68,9 +68,9 @@ namespace {
                         newEdges.emplace_back(move(edge(from,to,by)));
                         auto iter = adjVec[from].find(by);
                         if (iter == adjVec[from].end()) {
-                            adjVec[from].insert(make_pair(by, vector<int>(1, to)));
+                            adjVec[from].insert(make_pair(by, set<int>({to})));
                         } else {
-                            iter->second.emplace_back(to);
+                            iter->second.insert(to);
                         }
                     } else {
                         cout << "Can't parse " << curString
