@@ -8,6 +8,7 @@
 #include <set>
 #include <chrono>
 #include <future>
+#include <immintrin.h>
 
 
 using indexArrayType = vector<std::pair<int, int>>;
@@ -65,9 +66,8 @@ bool insertToFiniteAutomation(adjacencyType & finiteAutomation, int start, int f
     auto existIter = finiteAutomation[start].find(by);
     if (existIter != finiteAutomation[start].end()) {
         return existIter->second.insert(final).second;
-    } else {
-        finiteAutomation[start].insert(make_pair(by, set<int>{final}));
     }
+    finiteAutomation[start].insert(make_pair(by, set<int>{final}));
     return true;
 }
 
@@ -90,24 +90,25 @@ void getCurTime(decltype(chrono::steady_clock::now()) start_time, string && msg)
     std::cout << "Time: " << duration.count() << " msec\n";
 }
 
-int main() {
+int main(int argc, char* argv[]) {
 
     adjacencyType RFA;
     startStatesType startStatesRFA;
     finalStatesType finalStatesRFA;
-    readRFA("testRFA/Q1RFA.txt", RFA, startStatesRFA, finalStatesRFA, numOfStatesRFA);
+    readRFA(argv[1], RFA, startStatesRFA, finalStatesRFA, numOfStatesRFA);
 
     adjacencyType DFA;
     vector<edge> newEdges = vector<edge>(0);
-    readDFA("data/finding.dot", DFA, numOfStatesDFA, newEdges);
+    readDFA(argv[2], DFA, numOfStatesDFA, newEdges);
 
-    char ** matrix;
-    matrixSize = numOfStatesDFA * numOfStatesRFA;
-    matrix = new char * [matrixSize];
+	matrixSize = numOfStatesDFA * numOfStatesRFA;
+
+	int matrixSizeTo32 = matrixSize % 32 == 0 ? matrixSize : matrixSize + (32 - matrixSize % 32); // for AVX2
+	auto matrix = new char * [matrixSize];
     for (auto i = 0; i < matrixSize; ++ i) {
-        matrix[i] = new char[matrixSize];
+        matrix[i] = new char[matrixSizeTo32];
         char * matrixRow = matrix[i];
-        for (auto j = 0; j < matrixSize; ++ j) {
+        for (auto j = 0; j < matrixSizeTo32; ++ j) {
             matrixRow[j] = 0;
         }
     }
@@ -132,34 +133,42 @@ int main() {
 
     bool needOneMoreStep = false;
 
-    indexArrayType indexArray = indexArrayType(0);
-    indexArray.reserve(static_cast<unsigned int>(numOfStatesDFA * numOfStatesRFA));
 
-    for (int i = 0; i < numOfStatesDFA; ++ i) {
-        for (int j = 0; j < numOfStatesRFA; ++ j) {
-            indexArray.emplace_back(make_pair(i, j));
-        }
-    }
+    auto THREADS = std::thread::hardware_concurrency() - 1;
+    int step = matrixSize / (THREADS + 1);
 
+    __m256i ik = _mm256_set1_epi8(1); // PogChamp
 
-    auto THREADS = std::thread::hardware_concurrency();
-    int step = matrixSize / THREADS;
-
-    auto parallelClosure = [&matrix](int startK, int howMuch) {
+    auto parallelClosure = [&matrix, &ik, matrixSizeTo32](int startK, int howMuch) {
         int endK = startK + howMuch;
         for (auto k = startK; k < endK; ++ k) {
             for (auto i = 0; i < matrixSize; ++ i) {
                 char * matrixRow = matrix[i];
                 if (matrixRow[k]) {
-                    char * matrixK = matrix[k];
-                    for (auto j = 0; j < matrixSize; ++ j) {
-                        if (matrixK[j])
-                    		matrixRow[j] = 1;
-                    }
+					for (auto j = 0; j < matrixSizeTo32; j += 32) {
+						__m256i ij = _mm256_loadu_si256((__m256i const *) &matrixRow[j]);
+						__m256i kj = _mm256_loadu_si256((__m256i const *) &matrix[k][j]);
+
+						_mm256_storeu_si256((__m256i *) &matrixRow[j], _mm256_or_si256(ij, _mm256_and_si256(ik, kj)));
+					}
+//					for (auto j = 0; j < matrixSize; ++ j) {
+//						if (matrix[k][j]) {
+//							matrixRow[j] = true;
+//						}
+//					}
                 }
             }
         }
     };
+
+	indexArrayType indexArray;
+	indexArray.reserve(static_cast<unsigned int>(numOfStatesDFA * numOfStatesRFA));
+
+	for (int i = 0; i < numOfStatesDFA; ++ i) {
+		for (int j = 0; j < numOfStatesRFA; ++ j) {
+			indexArray.emplace_back(make_pair(i, j));
+		}
+	}
 
     do {
         needOneMoreStep = false;
@@ -170,46 +179,22 @@ int main() {
         //getCurTime(start_time, "1 stage done");
 
 
-
         vector<future<void>> futArr;
         futArr.reserve(THREADS);
-        for (auto i = 0; i < THREADS - 1; ++ i) {
+        for (auto i = 0; i < THREADS; ++ i) {
             futArr.emplace_back(std::async(launch::async, parallelClosure, i * step, step));
         }
 
-        // 9 / 2 = 4
-		// на 4 тред - 3
-		//
-        parallelClosure((THREADS - 1) * step, matrixSize - (THREADS - 1) * step);
+        parallelClosure(THREADS * step, matrixSize - THREADS * step);
 
-        for (auto i = 0; i < THREADS - 1; ++ i) {
+        for (auto i = 0; i < THREADS; ++ i) {
             futArr[i].get();
         }
 
         // stage 2: closure
-//        for (auto k = 0; k < matrixSize; ++ k) {
-//            for (auto i = 0; i < matrixSize; ++ i) {
-//                char * matrixRow = matrix[i];
-//                if (matrixRow[k]) {
-//                    char * matrixK = matrix[k];
-//                    for (auto j = 0; j < matrixSize; ++ j) {
-//                        if (matrixK[j]) {
-//                            matrixRow[j] = true;
-//                        }
-//                    }
-//                }
-//            }
-//        }
-
         //getCurTime(start_time, "2 stage done");
 
-        // stage 3: add new edges for nonterminals to DFA after closure
-
-        // can be improved by reordering of search
-        // find starting states for edges -> get step in matrix -> so on
-
-        // a lot of rechecking (mb it is good after closure)
-
+		//cout << countResult(DFA) << " before\n";
         newEdges = vector<edge>(0);
         for (auto i = 0; i < matrixSize; ++ i) {
             char * matrixRow = matrix[i];
@@ -226,8 +211,10 @@ int main() {
                                     if (finalStateForNonTerm == finalGrm) {
                                         int startDFA = indexArray[i].first;
                                         int finalDFA = indexArray[j].first;
-                                        newEdges.push_back(move(edge(startDFA, finalDFA, nonTerm)));
-                                        needOneMoreStep = insertToFiniteAutomation(DFA, startDFA, finalDFA, nonTerm);
+                                        if (insertToFiniteAutomation(DFA, startDFA, finalDFA, nonTerm)) {
+											newEdges.emplace_back(move(edge(startDFA, finalDFA, nonTerm)));
+											needOneMoreStep = true;
+                                        }
                                     }
                                 }
                             }
@@ -238,10 +225,15 @@ int main() {
 
         }
         //getCurTime(start_time, "3 stage done");
-
+		//cout << countResult(DFA) << " after\n";
     } while (needOneMoreStep);
 
     getCurTime(start_time, "");
     cout << countResult(DFA) << "\n";
+
+    for (auto i = 0; i < matrixSize; ++ i) {
+    	delete[](matrix[i]);
+    }
+    delete[](matrix);
 
 }
